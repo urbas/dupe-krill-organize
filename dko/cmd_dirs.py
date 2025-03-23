@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import ClassVar
 
 import click
 from textual.app import App, ComposeResult
@@ -41,13 +42,22 @@ class OrganizeDirs(App):
     }
     """
 
+    BINDINGS: ClassVar = [
+        ("d", "sort_by_dupes", "Sort By Dupes"),
+        ("r", "sort_by_related_dirs", "Sort By Related Dirs"),
+        ("p", "sort_by_dir_path", "Sort By Dir Path"),
+    ]
+
     paths: list[Path]
+    sort_order: list[str]
+    sort_reverse: bool = True
     dupe_krill_report: bytes | None = None
     dir_entries: list[DirEntry] | None = None
 
     def __init__(self, paths: list[Path]):
         super().__init__()
         self.paths = paths
+        self.sort_order = ["dupes", "related_dirs", "dir_path"]
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -69,7 +79,6 @@ class OrganizeDirs(App):
         self.run_worker(self.process_report_worker(), exclusive=True)
 
     async def process_report_worker(self) -> None:
-        """Process the dupe-krill report in the background."""
         self.dupe_krill_report = await run_dupe_krill_report(self.paths)
         if self.dupe_krill_report is not None:
             self.dir_entries = await list_dirs(self.dupe_krill_report)
@@ -88,10 +97,37 @@ class OrganizeDirs(App):
                     dir_entry.related_dirs,
                     dir_entry.dir_path,
                 )
-            table.sort("dupes", "related_dirs", "dir_path", reverse=True)
+            self._update_sorting()
+
+    def _update_sorting(self) -> None:
+        table = self.query_one(DataTable)
+        table.sort(*self.sort_order, reverse=self.sort_reverse)
 
     def on_key(self, event) -> None:
         pass
+
+    def _update_sort_order(self, sort_type: str) -> None:
+        """Update the sort order based on the selected column.
+
+        If the column is already the primary sort, toggle the sort direction.
+        Otherwise, make it the primary sort column with descending order.
+        """
+        if self.sort_order[0] == sort_type:
+            self.sort_reverse = not self.sort_reverse
+        else:
+            self.sort_order.remove(sort_type)
+            self.sort_order.insert(0, sort_type)
+            self.sort_reverse = True
+        self._update_sorting()
+
+    def action_sort_by_dupes(self) -> None:
+        self._update_sort_order("dupes")
+
+    def action_sort_by_related_dirs(self) -> None:
+        self._update_sort_order("related_dirs")
+
+    def action_sort_by_dir_path(self) -> None:
+        self._update_sort_order("dir_path")
 
 
 @click.command(name="dirs")
