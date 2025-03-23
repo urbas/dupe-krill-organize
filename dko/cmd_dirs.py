@@ -38,6 +38,7 @@ class OrganizeDirs(App):
 
     BINDINGS: ClassVar = [
         ("r", "rerun_dupe_krill", "Re-run dupe-krill"),
+        ("q", "quit", "Quit"),
     ]
 
     paths: list[Path]
