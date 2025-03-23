@@ -1,133 +1,101 @@
+import asyncio
 from pathlib import Path
 from typing import ClassVar
 
 import click
+from textual import work
 from textual.app import App, ComposeResult
-from textual.containers import Container
-from textual.widgets import DataTable, Footer, Header, LoadingIndicator, Static
+from textual.containers import Container, Vertical
+from textual.widgets import DataTable, Footer, Header, Label, ListItem, ListView, Static
 
-from dko.analysis import DirEntry, list_dirs, run_dupe_krill_report
+from dko.analysis import get_related_dirs, list_dirs, run_dupe_krill_report
+from dko.widgets.dirs import Dirs
 
 
 class OrganizeDirs(App):
     """A Textual app to organize and view directories."""
 
     CSS = """
-    DataTable {
-        width: 100%;
+    #dirs {
         height: 100%;
     }
 
-    LoadingIndicator {
-        height: auto;
+    #main-container {
+        layout: grid;
+        width: 100%;
+        height: 100%;
+        grid-size: 1 2;
+        grid-rows: 3fr 1fr;
     }
 
-    #directory-container {
-        width: 100%;
+    #related-dirs-container {
         height: 100%;
     }
 
-    #loading-container {
-        width: 100%;
-        height: 100%;
-        align: center middle;
-    }
-
-    .loading-text {
-        text-align: center;
-    }
-
-    .hidden {
-        display: none;
+    #related-dirs {
     }
     """
 
     BINDINGS: ClassVar = [
-        ("d", "sort_by_dupes", "Sort By Dupes"),
-        ("r", "sort_by_related_dirs", "Sort By Related Dirs"),
-        ("p", "sort_by_dir_path", "Sort By Dir Path"),
+        ("r", "rerun_dupe_krill", "Re-run dupe-krill"),
     ]
 
     paths: list[Path]
-    sort_order: list[str]
-    sort_reverse: bool = True
     dupe_krill_report: bytes | None = None
-    dir_entries: list[DirEntry] | None = None
 
     def __init__(self, paths: list[Path]):
         super().__init__()
         self.paths = paths
-        self.sort_order = ["dupes", "related_dirs", "dir_path"]
 
     def compose(self) -> ComposeResult:
         yield Header()
-
-        with Container(id="loading-container"):
-            yield LoadingIndicator()
-            yield Static("Loading dupe-krill report...", classes="loading-text")
-
-        with Container(id="directory-container", classes="hidden"):
-            table = DataTable()
-            table.add_column("Dupes", key="dupes")
-            table.add_column("Related Dirs", key="related_dirs")
-            table.add_column("Directory Path", key="dir_path")
-            yield table
-
+        with Container(id="main-container"):
+            yield Dirs(id="dirs")
+            with Vertical(id="related-dirs-container"):
+                yield Static("Related directories:")
+                yield ListView(id="related-dirs")
         yield Footer()
 
     def on_mount(self) -> None:
-        self.run_worker(self.process_report_worker(), exclusive=True)
+        self.rerun_dupe_krill()
 
-    async def process_report_worker(self) -> None:
+    def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
+        self.refresh_related_dirs(event.row_key.value)
+
+    def action_rerun_dupe_krill(self) -> None:
+        self.rerun_dupe_krill()
+
+    def rerun_dupe_krill(self) -> None:
+        table = self.query_one(Dirs)
+        table.loading = True
+        self.rerun_dupe_krill_worker(table)
+
+    def refresh_related_dirs(self, target_dir: str | None) -> None:
+        list_view = self.query_one(ListView)
+        list_view.loading = True
+        self.refresh_related_dirs_worker(target_dir, list_view)
+
+    @work(exclusive=True)
+    async def rerun_dupe_krill_worker(self, table: Dirs) -> None:
         self.dupe_krill_report = await run_dupe_krill_report(self.paths)
         if self.dupe_krill_report is not None:
-            self.dir_entries = await list_dirs(self.dupe_krill_report)
-        self._update_ui()
+            dir_entries = await list_dirs(self.dupe_krill_report)
+            table.update_dir_entries(dir_entries)
+            table.focus()
+        table.loading = False
 
-    def _update_ui(self) -> None:
-        self.query_one("#loading-container").add_class("hidden")
-        directory_container = self.query_one("#directory-container")
-        directory_container.remove_class("hidden")
-
-        table = self.query_one(DataTable)
-        if self.dir_entries:
-            for dir_entry in self.dir_entries:
-                table.add_row(
-                    dir_entry.dupe_count,
-                    dir_entry.related_dirs,
-                    dir_entry.dir_path,
-                )
-            self._update_sorting()
-
-    def _update_sorting(self) -> None:
-        table = self.query_one(DataTable)
-        table.sort(*self.sort_order, reverse=self.sort_reverse)
-
-    def on_key(self, event) -> None:
-        pass
-
-    def _update_sort_order(self, sort_type: str) -> None:
-        """Update the sort order based on the selected column.
-
-        If the column is already the primary sort, toggle the sort direction.
-        Otherwise, make it the primary sort column with descending order.
-        """
-        if self.sort_order[0] == sort_type:
-            self.sort_reverse = not self.sort_reverse
-        else:
-            self.sort_order.remove(sort_type)
-            self.sort_order.insert(0, sort_type)
-            self.sort_reverse = True
-        self._update_sorting()
-
-    def action_sort_by_dupes(self) -> None:
-        self._update_sort_order("dupes")
-
-    def action_sort_by_related_dirs(self) -> None:
-        self._update_sort_order("related_dirs")
-
-    def action_sort_by_dir_path(self) -> None:
-        self._update_sort_order("dir_path")
+    @work(exclusive=True)
+    async def refresh_related_dirs_worker(
+        self, target_dir: str | None, list_view: ListView
+    ) -> None:
+        if target_dir and self.dupe_krill_report:
+            await asyncio.sleep(0.3)
+            related_dirs = await get_related_dirs(self.dupe_krill_report, target_dir)
+            list_view.clear()
+            if related_dirs is not None:
+                for related_dir in related_dirs:
+                    list_view.append(ListItem(Label(related_dir)))
+        list_view.loading = False
 
 
 @click.command(name="dirs")

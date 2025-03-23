@@ -71,6 +71,7 @@
             nodePackages.prettier
             parallel
             pyright
+            python3.pkgs.ipython
             ruff
           ];
         };

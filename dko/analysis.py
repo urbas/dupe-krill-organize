@@ -63,3 +63,22 @@ async def list_dirs(dupe_krill_report: bytes) -> list[DirEntry] | None:
             )
 
     return entries
+
+
+async def get_related_dirs(
+    dupe_krill_report: bytes, target_dir: str
+) -> list[str] | None:
+    cmd = ["dupe-krill-analyze", "related-dirs", target_dir]
+
+    process = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+
+    stdout_bytes, stderr_bytes = await process.communicate(input=dupe_krill_report)
+
+    if handle_command_error(cmd, process, stderr_bytes, LOG):
+        return None
+    return stdout_bytes.decode("utf-8").strip().splitlines()
