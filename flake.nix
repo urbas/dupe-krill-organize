@@ -22,6 +22,7 @@
         pyproject = lib.importTOML ./pyproject.toml;
 
         runtimeBinDeps = with pkgs; [
+          diffutils
           dupe-krill
           dupe-krill-analyze.packages.${system}.default
         ];

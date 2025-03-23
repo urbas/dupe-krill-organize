@@ -18,6 +18,7 @@ from textual.widgets import (
 )
 
 from dko.analysis import DirEntry, get_related_dirs, list_dirs, run_dupe_krill_report
+from dko.widgets.delete_same_dirs_modal import DeleteSameDirsModal
 from dko.widgets.dirs import Dirs
 from dko.widgets.regex_filter_modal import RegexFilterModal
 
@@ -48,12 +49,14 @@ class OrganizeDirs(App):
         ("r", "rerun_dupe_krill", "Re-run dupe-krill"),
         ("q", "quit", "Quit"),
         ("f", "filter", "Filter"),
+        ("i", "delete_identical_dirs", "Delete identical"),
     ]
 
     dir_entries: list[DirEntry] | None = None
     dupe_krill_report: bytes | None = None
     regex_filter: str | None = None
     paths: list[Path]
+    selected_dir: str | None = None
 
     def __init__(self, paths: list[Path]):
         super().__init__()
@@ -71,6 +74,15 @@ class OrganizeDirs(App):
     def action_filter(self) -> None:
         self.push_screen(RegexFilterModal(self.regex_filter), self.set_filter)
 
+    def action_rerun_dupe_krill(self) -> None:
+        self.rerun_dupe_krill()
+
+    def action_delete_identical_dirs(self) -> None:
+        if self.selected_dir is not None:
+            self.push_screen(
+                DeleteSameDirsModal(self.selected_dir, self.dupe_krill_report)
+            )
+
     def set_filter(self, regex_filter: str | None) -> None:
         self.regex_filter = regex_filter
         self.refresh_dir_entries()
@@ -79,10 +91,11 @@ class OrganizeDirs(App):
         self.rerun_dupe_krill()
 
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
-        self.refresh_related_dirs(event.row_key.value)
+        self.selected_dir = None if event.row_key is None else event.row_key.value
+        self.refresh_related_dirs(self.selected_dir)
 
-    def action_rerun_dupe_krill(self) -> None:
-        self.rerun_dupe_krill()
+    def on_list_view_highlighted(self, event: ListView.Highlighted) -> None:
+        self.selected_dir = None if event.item is None else event.item.name
 
     def rerun_dupe_krill(self) -> None:
         table = self.query_one(Dirs)
@@ -131,7 +144,7 @@ class OrganizeDirs(App):
             list_view.clear()
             if related_dirs is not None:
                 for related_dir in related_dirs:
-                    list_view.append(ListItem(Label(related_dir)))
+                    list_view.append(ListItem(Label(related_dir), name=related_dir))
         list_view.loading = False
 
 

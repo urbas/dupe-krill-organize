@@ -31,6 +31,7 @@ lint.ignore = [
     "PLR2004", # magic value in comparison
     "S101", # Use of `assert` detected
     "S603", # execution of untrusted input
+    "S607", # Starting a process with a partial executable path
     "T201", # print
     "TRY003", # long strings in exceptions
     "TRY400", # use logging.exception
