@@ -1,0 +1,46 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "dupe-krill-organize"
+version = "0.0.1"
+description = "Interactively deduplicate your directories."
+license = { text = "MIT license" }
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+dupe-krill-organize = "dko.cli:main"
+
+[tool.ruff]
+line-length = 88
+lint.select = ["I", "ALL"]
+lint.ignore = [
+    "ANN", # Missing type annotation
+    "BLE", # blind exception
+    "COM812", # Trailing comma missing
+    "D", # pydocstyle
+    "E501", # line too long
+    "EM101", # string literals in exceptions
+    "EM102", # f-string literals in exceptions
+    "ERA001", # Found commented-out code
+    "INP", # implicit-namespace-packagepydocstyle
+    "ISC001", # Implicitly concatenated string literals on one line
+    "PLR2004", # magic value in comparison
+    "S101", # Use of `assert` detected
+    "S603", # execution of untrusted input
+    "T201", # print
+    "TRY003", # long strings in exceptions
+    "TRY400", # use logging.exception
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["dko"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "dko",
+    "tests",
+]
